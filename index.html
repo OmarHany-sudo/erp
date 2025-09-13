@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meliora ERP Dashboard</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ====== NEW: Toastify for Notifications ====== -->
+  <script src="https://cdn.jsdelivr.net/npm/react-toastify@9.1.3/dist/react-toastify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/react-toastify@9.1.3/dist/ReactToastify.css" />
+
+  <!-- ====== NEW: Chart.js library ====== -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#8b0000',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7fa; }
+    .container { display: flex; height: 100vh; }
+    .sidebar { width: 250px; background-color: #fff; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.1); overflow-y: auto; }
+    .content { flex-grow: 1; padding: 20px; overflow-y: auto; }
+    .card { background-color: #e9ecef; padding: 20px; border-radius: 8px; text-align: center; }
+    .progress-bar { width: 100%; height: 20px; background-color: #e9ecef; border-radius: 10px; overflow: hidden; margin: 5px 0; }
+    .progress { height: 100%; background-color: #8b0000; border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
+    th { background-color: #f8f9fa; }
+    .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+    .btn-primary { background-color: #8b0000; color: #fff; }
+    .btn-secondary { background-color: #fff; color: #8b0000; border: 1px solid #8b0000; }
+    .btn-success { background-color: #28a745; color: #fff; }
+    .btn-danger { background-color: #dc3545; color: #fff; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-content { background: white; padding: 20px; border-radius: 8px; width: 50%; max-width: 600px; }
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .nav-tabs button { padding: 10px; border-bottom: 2px solid transparent; cursor: pointer; }
+    .nav-tabs button.active { border-bottom-color: #8b0000; color: #8b0000; font-weight: bold; }
+    .dark { background-color: #1a1a1a; color: white; }
+    .dark .sidebar, .dark .card { background-color: #333; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Custom Hook for fetching data
+    const useFetch = (endpoint) => {
+        const [data, setData] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [extraData, setExtraData] = useState({});
+
+        useEffect(() => {
+            const fetchData = async () => {
+                try {
+                    setLoading(true);
+                    setExtraData({});
+                    const response = await fetch(`http://localhost:5000${endpoint}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    const responseData = result.data;
+
+                    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData) && responseData.chartData) {
+                        const { chartData, ...mainData } = responseData;
+                        setData(mainData);
+                        setExtraData({ chartData });
+                    } else {
+                        setData(responseData);
+                    }
+            } catch (e) {
+                setError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+            fetchData();
+        }, [endpoint]);
+
+        return { data, loading, error, ...extraData };
+        };
+
+
+    // Custom Hook for fetching and managing data (POST, PUT, DELETE)
+    const useApi = (endpoint) => {
+        const [data, setData] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const baseUrl = 'http://localhost:5000';
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const response = await fetch(`${baseUrl}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                const result = await response.json();
+                setData(result.data);
+            } catch (e) {
+                setError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => {
+            fetchData();
+        }, [endpoint]);
+
+        const post = async (body) => {
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) throw new Error('Failed to post data');
+            fetchData(); // Refresh data
+        };
+
+        const put = async (id, body) => {
+            const response = await fetch(`${baseUrl}${endpoint}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) throw new Error('Failed to update data');
+            fetchData(); // Refresh data
+        };
+
+        const remove = async (id) => {
+            const response = await fetch(`${baseUrl}${endpoint}/${id}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete data');
+            fetchData(); // Refresh data
+        };
+
+        return { data, loading, error, post, put, remove };
+    };
+
+    // Sidebar Component
+    const Sidebar = ({ activeModule, setActiveModule, darkMode, setDarkMode }) => {
+      const menuItems = [
+        { name: 'Dashboard', key: 'dashboard' },
+        { name: 'Finance', key: 'finance' },
+        { name: 'HR', key: 'hr' },
+        { name: 'Projects', key: 'projects' },
+        { name: 'Warehouse', key: 'warehouse' },
+        { name: 'Purchases', key: 'purchases' },
+        { name: 'Technical Office', key: 'technical-office' },
+        { name: 'Showroom Sales', key: 'showroom-sales' },
+        { name: 'Office Management', key: 'office-management' },
+        { name: 'Reports', key: 'reports' },
+        { name: 'ChatBox', key: 'chatbox' },
+        { name: 'Settings', key: 'settings' },
+        { name: 'Contracts', key: 'contracts' },
+      ];
+      return (
+        <div className={`sidebar ${darkMode ? 'dark' : ''}`}>
+          <h2 className="text-xl font-bold text-primary mb-4">MELIORA</h2>
+          <nav>
+            {menuItems.map(item => (
+              <button
+                key={item.key}
+                onClick={() => setActiveModule(item.key)}
+                className={`w-full text-left px-4 py-2 my-1 rounded ${activeModule === item.key ? 'bg-primary text-white' : ''}`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-4 flex items-center space-x-2">
+            <label>Dark Mode</label>
+            <input type="checkbox" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
+          </div>
+        </div>
+      );
+    };
+
+    // Dashboard Component - NOW WITH CHART
+    const Dashboard = () => {
+      const { data: summary, loading, error, chartData } = useFetch('/api/dashboard/summary');
+      const { data: projects } = useFetch('/projects');
+      useEffect(() => {
+        if (chartData) {
+          const existingChart = Chart.getChart('revenueChart');
+          if (existingChart) {
+            existingChart.destroy();
+          }
+          const ctx = document.getElementById('revenueChart').getContext('2d');
+          const myChart = new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: {
+              scales: {
+                y: {
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+        }
+      }, [chartData]);
+      if (loading) return <p>Loading Dashboard...</p>;
+      if (error) return <p className="text-red-500">Error loading dashboard: {error}</p>;
+
+      return (
+          <div>
+            <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="card">
+                <h3>Total Revenue</h3>
+                <p className="text-2xl">${summary?.totalRevenue?.toLocaleString()}</p>
+                <p className="text-green-500">+15% (mock)</p>
+              </div>
+              <div className="card">
+                <h3>Total Expenses</h3>
+                <p className="text-2xl">${summary?.totalExpenses?.toLocaleString()}</p>
+                <p className="text-red-500">-10% (mock)</p>
+              </div>
+              <div className="card">
+                <h3>Cash Flow</h3>
+                <p className="text-2xl">${summary?.cashFlow?.toLocaleString()}</p>
+                <p className="text-green-500">+20% (mock)</p>
+              </div>
+            </div>
+             {/* === NEW: Revenue vs Expenses Chart === */}
+            <div className="card my-4">
+                <canvas id="revenueChart" width="400" height="200"></canvas>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="card">
+                <h3>Project Status</h3>
+                {(projects || []).slice(0, 3).map(p => (
+                  <div key={p.id}>
+                    <p>{p.name}</p>
+                    <div className="progress-bar">
+                        <div className="progress" style={{width: `${(p.expenses / p.budget) * 100}%`}}></div>
+                    </div>
+                    <p className="text-sm text-gray-500">{Math.round((p.expenses / p.budget) * 100)}% Complete</p>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <h3>HR Statistics (Static)</h3>
+                <div className="space-y-2">
+                  <p>Employee Count: <span className="text-2xl">150</span> <span className="text-green-500">+5%</span></p>
+                  <p>New Hires: <span className="text-2xl">10</span> <span className="text-green-500">+2%</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+    );
+    };
+
+    // Finance Sub-Components
+    const GeneralLedger = () => {
+        const { data, loading, error, post, put, remove } = useApi('/gl');
+        const [showForm, setShowForm] = useState(false);
+        const [editingEntry, setEditingEntry] = useState(null);
+
+        const handleSave = async (entry) => {
+            try {
+                if (editingEntry) {
+                    await put(editingEntry.id, entry);
+                } else {
+                    await post(entry);
+                }
+                setEditingEntry(null);
+                setShowForm(false);
+            } catch (e) {
+                alert(`Error saving entry: ${e.message}`);
+            }
+        };
+
+        const handleEdit = (entry) => {
+            setEditingEntry(entry);
+            setShowForm(true);
+        };
+
+        const handleDelete = async (id) => {
+            if (window.confirm('Are you sure you want to delete this entry?')) {
+                try {
+                    await remove(id);
+                } catch (e) {
+                    alert(`Error deleting entry: ${e.message}`);
+                }
+            }
+        };
+
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        return (
+            <div>
+                <h2 className="text-2xl font-bold mb-4">General Ledger</h2>
+                <button className="btn btn-primary" onClick={() => { setEditingEntry(null); setShowForm(true); }}>New Entry</button>
+                <table>
+                  <thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {data.map(entry => (
+                        <tr key={entry.id}>
+                            <td>{entry.date}</td>
+                            <td>{entry.account}</td>
+                            <td>{entry.description}</td>
+                            <td>${entry.debit.toFixed(2)}</td>
+                            <td>${entry.credit.toFixed(2)}</td>
+                            <td>
+                                <button className="btn btn-secondary" onClick={() => handleEdit(entry)}>Edit</button>
+                                <button className="btn btn-danger" onClick={() => handleDelete(entry.id)}>Delete</button>
+                            </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {showForm && <JournalEntryForm
+                                entryData={editingEntry}
+                                onClose={() => { setShowForm(false); setEditingEntry(null); }}
+                                onSave={handleSave}
+                             />}
+            </div>
+        );
+    };
+
+    const JournalEntryForm = ({ entryData, onClose, onSave }) => {
+      const [entry, setEntry] = useState({ date: '', account: '', description: '', debit: 0, credit: 0 });
+
+      useEffect(() => {
+        if (entryData) {
+            setEntry(entryData);
+        } else {
+            setEntry({ date: '', account: '', description: '', debit: 0, credit: 0 });
+        }
+      }, [entryData]);
+
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        setEntry(prev => ({ ...prev, [name]: value }));
+      };
+
+      const handleSave = async () => {
+          if (!entry.date || !entry.account || !entry.description || isNaN(Number(entry.debit)) || isNaN(Number(entry.credit))) {
+              alert("Please fill all fields with valid data.");
+              return;
+          }
+          try {
+        await onSave(entry);
+          } catch (e) {
+              alert(e.message);
+          }
+      };
+
+      return (
+        <div className="modal">
+          <div className="modal-content">
+            <h2 className="text-2xl font-bold mb-4">{entryData ? 'Edit' : 'Add'} Journal Entry</h2>
+            <input name="date" value={entry.date} type="date" className="border p-2 mb-2 w-full" onChange={handleChange} />
+            <input name="account" value={entry.account} className="border p-2 mb-2 w-full" placeholder="Account" onChange={handleChange} />
+            <input name="description" value={entry.description} className="border p-2 mb-2 w-full" placeholder="Description" onChange={handleChange} />
+            <input name="debit" value={entry.debit} type="number" className="border p-2 mb-2 w-full" placeholder="Debit" onChange={handleChange} />
+            <input name="credit" value={entry.credit} type="number" className="border p-2 mb-2 w-full" placeholder="Credit" onChange={handleChange} />
+            <div className="flex justify-end space-x-2">
+              <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSave}>Save</button>
+            </div>
+          </div>
+        </div>
+    );
+    };
+
+    const AccountsPayable = () => {
+        const { data, loading, error, post, put, remove } = useApi('/ap');
+        const [showForm, setShowForm] = useState(false);
+        const [editingInvoice, setEditingInvoice] = useState(null);
+
+        const handleSave = async (invoice) => {
+            if (editingInvoice) await put(editingInvoice.id, invoice);
+            else await post(invoice);
+            setEditingInvoice(null);
+            setShowForm(false);
+        };
+        const handleEdit = (invoice) => { setEditingInvoice(invoice); setShowForm(true); };
+        const handleDelete = async (id) => { if (window.confirm('Delete this invoice?')) await remove(id); };
+
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Accounts Payable</h2>
+            <button className="btn btn-primary" onClick={() => { setEditingInvoice(null); setShowForm(true); }}>New Invoice</button>
+            <table>
+              <thead><tr><th>Supplier Name</th><th>Invoice #</th><th>Due Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {data.map(invoice => (
+                    <tr key={invoice.id}>
+                        <td>{invoice.supplier}</td>
+                        <td>{invoice.invoiceNo}</td>
+                        <td>{invoice.dueDate}</td>
+                        <td>${invoice.amount.toFixed(2)}</td>
+                        <td><button className={`btn ${invoice.status === 'Paid' ? 'btn-success' : (invoice.status === 'Overdue' ? 'btn-danger' : 'btn-secondary')}`}>{invoice.status}</button></td>
+                        <td>
+                            <button className="btn btn-secondary" onClick={() => handleEdit(invoice)}>Edit</button>
+                            <button className="btn btn-danger" onClick={() => handleDelete(invoice.id)}>Delete</button>
+                        </td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+            {showForm && <InvoiceForm type="ap" invoiceData={editingInvoice} onClose={() => { setShowForm(false); setEditingInvoice(null); }} onSave={handleSave} />}
+          </div>
+        );
+    };
+
+    const InvoiceForm = ({ invoiceData, onClose, onSave, type = 'ap' }) => {
+        const initial = { supplier: '', customer: '', invoiceNo: '', dueDate: '', amount: 0, status: 'Pending' };
+        const [invoice, setInvoice] = useState(initial);
+
+        useEffect(() => {
+            if (invoiceData) setInvoice(invoiceData);
+            else setInvoice(initial);
+        }, [invoiceData]);
+
+        const handleChange = (e) => {
+            const { name, value } = e.target;
+            setInvoice(prev => ({...prev, [name]: value}));
+        };
+
+        const handleSave = async () => {
+            const nameField = type === 'ap' ? 'supplier' : 'customer';
+            if (!invoice[nameField] || !invoice.invoiceNo || !invoice.dueDate || isNaN(Number(invoice.amount))) {
+                alert("Please fill all fields with valid data.");
+                return;
+            }
+            const dataToSave = {...invoice};
+            if (type === 'ap') delete dataToSave.customer;
+            else delete dataToSave.supplier;
+            try {
+            await onSave(dataToSave);
+            } catch (e) {
+                alert(e.message);
+            }
+        };
+
+        return (
+          <div className="modal">
+            <div className="modal-content">
+              <h2 className="text-2xl font-bold mb-4">{invoiceData ? 'Edit' : 'Add'} Invoice</h2>
+              {type === 'ap' ? (
+                <input name="supplier" value={invoice.supplier || ''} className="border p-2 mb-2 w-full" placeholder="Supplier Name" onChange={handleChange} />
+              ) : (
+                <input name="customer" value={invoice.customer || ''} className="border p-2 mb-2 w-full" placeholder="Customer Name" onChange={handleChange} />
+              )}
+              <input name="invoiceNo" value={invoice.invoiceNo || ''} className="border p-2 mb-2 w-full" placeholder="Invoice Number" onChange={handleChange} />
+              <input name="dueDate" value={invoice.dueDate || ''} type="date" className="border p-2 mb-2 w-full" onChange={handleChange} />
+              <input name="amount" value={invoice.amount || 0} type="number" className="border p-2 mb-2 w-full" placeholder="Amount" onChange={handleChange} />
+              <select name="status" value={invoice.status || 'Pending'} className="border p-2 mb-2 w-full" onChange={handleChange}>
+                  <option>Pending</option>
+                  <option>Paid</option>
+                  <option>Overdue</option>
+              </select>
+              <div className="flex justify-end space-x-2">
+                <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave}>Save</button>
+              </div>
+            </div>
+          </div>
+    );
+    };
+
+    const AccountsReceivable = () => {
+        const { data, loading, error, post, put, remove } = useApi('/ar');
+        const [showForm, setShowForm] = useState(false);
+        const [editingInvoice, setEditingInvoice] = useState(null);
+
+        const handleSave = async (invoice) => {
+            if (editingInvoice) await put(editingInvoice.id, invoice);
+            else await post(invoice);
+            setEditingInvoice(null);
+            setShowForm(false);
+        };
+        const handleEdit = async (invoice) => { setEditingInvoice(invoice); setShowForm(true); };
+        const handleDelete = async (id) => { if (window.confirm('Delete this invoice?')) await remove(id); };
+
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Accounts Receivable</h2>
+            <button className="btn btn-primary" onClick={() => { setEditingInvoice(null); setShowForm(true); }}>New Invoice</button>
+            <table>
+              <thead><tr><th>Customer Name</th><th>Invoice #</th><th>Due Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {data.map(invoice => (
+                    <tr key={invoice.id}>
+                        <td>{invoice.customer}</td>
+                        <td>{invoice.invoiceNo}</td>
+                        <td>{invoice.dueDate}</td>
+                        <td>${invoice.amount.toFixed(2)}</td>
+                        <td><button className={`btn ${invoice.status === 'Paid' ? 'btn-success' : (invoice.status === 'Overdue' ? 'btn-danger' : 'btn-secondary')}`}>{invoice.status}</button></td>
+                        <td>
+                            <button className="btn btn-secondary" onClick={() => handleEdit(invoice)}>Edit</button>
+                            <button className="btn btn-danger" onClick={() => handleDelete(invoice.id)}>Delete</button>
+                        </td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+            {showForm && <InvoiceForm type="ar" invoiceData={editingInvoice} onClose={() => { setShowForm(false); setEditingInvoice(null); }} onSave={handleSave} />}
+          </div>
+        );
+    };
+
+    const CostCenters = () => {
+        const { data, loading, error, post, put, remove } = useApi('/cost_centers');
+        const [showForm, setShowForm] = useState(false);
+        const [editingCC, setEditingCC] = useState(null);
+
+        const handleSave = async (cc) => {
+            if (editingCC) await put(editingCC.id, cc);
+            else await post(cc);
+            setEditingCC(null);
+            setShowForm(false);
+        };
+        const handleEdit = async (cc) => { setEditingCC(cc); setShowForm(true); };
+        const handleDelete = async (id) => { if (window.confirm('Delete this cost center?')) await remove(id); };
+
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        return (
+            <div>
+                <h2 className="text-2xl font-bold mb-4">Cost Centers</h2>
+                <button className="btn btn-primary" onClick={() => { setEditingCC(null); setShowForm(true); }}>Add Cost Center</button>
+                <table>
+                  <thead><tr><th>Name</th><th>Department</th><th>Budget</th><th>Actual</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {data.map(cc => (
+                        <tr key={cc.id}>
+                            <td>{cc.name}</td>
+                            <td>{cc.department}</td>
+                            <td>${cc.budget.toFixed(2)}</td>
+                            <td>${cc.actual.toFixed(2)}</td>
+                            <td>
+                                <button className="btn btn-secondary" onClick={() => handleEdit(cc)}>Edit</button>
+                                <button className="btn btn-danger" onClick={() => handleDelete(cc.id)}>Delete</button>
+                            </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {showForm && <CostCenterForm ccData={editingCC} onClose={() => { setShowForm(false); setEditingCC(null); }} onSave={handleSave} />}
+            </div>
+        );
+    };
+
+    const CostCenterForm = ({ ccData, onClose, onSave }) => {
+        const [cc, setCc] = useState({ name: '', description: '', department: '', budget: 0, actual: 0 });
+
+        useEffect(() => {
+            if (ccData) setCc(ccData);
+            else setCc({ name: '', description: '', department: '', budget: 0, actual: 0 });
+        }, [ccData]);
+
+        const handleChange = (e) => {
+            const { name, value } = e.target;
+            setCc(prev => ({ ...prev, [name]: value }));
+        };
+
+        const handleSave = async () => {
+            if (!cc.name || !cc.department || isNaN(Number(cc.budget)) || isNaN(Number(cc.actual))) {
+                alert("Please fill all fields with valid data.");
+                return;
+            }
+            try {
+                await onSave(cc);
+            } catch (e) {
+                alert(e.message);
+            }
+    };
+
+        return (
+          <div className="modal">
+            <div className="modal-content">
+              <h2 className="text-2xl font-bold mb-4">{ccData ? 'Edit' : 'Add'} Cost Center</h2>
+              <input name="name" value={cc.name} className="border p-2 mb-2 w-full" placeholder="Cost Center Name" onChange={handleChange} />
+              <input name="department" value={cc.department} className="border p-2 mb-2 w-full" placeholder="Department/Project" onChange={handleChange} />
+              <input name="budget" value={cc.budget} type="number" className="border p-2 mb-2 w-full" placeholder="Budget Allocation" onChange={handleChange} />
+              <input name="actual" value={cc.actual} type="number" className="border p-2 mb-2 w-full" placeholder="Actual Expenses" onChange={handleChange} />
+              <div className="flex justify-end space-x-2">
+                <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave}>Save</button>
+              </div>
+            </div>
+          </div>
+    );
+    };
+
+    const ProjectBudgets = () => {
+        const { data, loading, error } = useFetch('/projects');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Project Budgets</h2>
+            <input className="border p-2 mb-2 w-full" placeholder="Search projects..." />
+            <select className="border p-2 mb-2"><option>Status</option></select>
+            <select className="border p-2 mb-2"><option>Budget</option></select>
+            <table>
+              <thead><tr><th>Project Name</th><th>Budgeted Amount</th><th>Expenses Incurred</th><th>Remaining Budget</th><th>Status</th></tr></thead>
+              <tbody>
+                {(data || []).map(p => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>${p.budget.toFixed(2)}</td>
+                    <td>${p.expenses.toFixed(2)}</td>
+                    <td>${p.remaining.toFixed(2)}</td>
+                    <td><button className={`btn ${p.status === 'On Track' ? 'btn-success' : 'btn-danger'}`}>{p.status}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button className="btn btn-primary" onClick={() => console.log('Add Project Budget')}>Add Project Budget</button>
+            <button className="btn btn-secondary" onClick={() => console.log('Export Data')}>Export Data</button>
+          </div>
+    );
+    };
+
+    const ProfitLoss = () => {
+        const { data, loading, error } = useFetch('/pl');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Profit & Loss Statements</h2>
+            <table>
+              <thead><tr><th>Account</th><th>Q1 2024</th><th>Q2 2024</th><th>Change</th></tr></thead>
+              <tbody>
+                {(data || []).map(item => (
+                    <tr key={item.id}>
+                        <td>{item.account}</td>
+                        <td>${item.q1.toFixed(2)}</td>
+                        <td>${item.q2.toFixed(2)}</td>
+                        <td>{item.change}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+    };
+
+    const BalanceSheet = () => {
+        const { data, loading, error } = useFetch('/balance');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        const assets = (data || []).filter(i => i.category === 'Assets');
+        const liabilities = (data || []).filter(i => i.category === 'Liabilities');
+        const equity = (data || []).filter(i => i.category === 'Equity');
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Balance Sheet</h2>
+            <p className="mb-4">As of December 31, 2023</p>
+            <table>
+              <thead><tr><th colSpan="2">Assets</th></tr></thead>
+              <tbody>{assets.map(item => <tr key={item.id}><td>{item.item}</td><td>${item.value.toLocaleString()}</td></tr>)}</tbody>
+              <thead><tr><th colSpan="2">Liabilities</th></tr></thead>
+              <tbody>{liabilities.map(item => <tr key={item.id}><td>{item.item}</td><td>${item.value.toLocaleString()}</td></tr>)}</tbody>
+              <thead><tr><th colSpan="2">Equity</th></tr></thead>
+              <tbody>{equity.map(item => <tr key={item.id}><td>{item.item}</td><td>${item.value.toLocaleString()}</td></tr>)}</tbody>
+            </table>
+          </div>
+        );
+    };
+
+    const CashFlow = () => {
+        const { data, loading, error } = useFetch('/cashflow');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+      return (
+        <div>
+            <h2 className="text-2xl font-bold mb-4">Cash Flow</h2>
+            <table>
+              <thead><tr><th>Activity</th><th>Details</th><th>Amount</th></tr></thead>
+              <tbody>
+                {(data || []).map(item => (
+                    <tr key={item.id}>
+                        <td>{item.activity}</td>
+                        <td>{item.details}</td>
+                        <td>${item.amount.toLocaleString()}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+    };
+
+    const BankReconciliation = () => {
+        const { data, loading, error } = useFetch('/reconciliation');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        const record = (data && data[0]) || {};
+        return (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Bank Reconciliation</h2>
+            <table>
+              <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                <tr><td>Bank Statement Balance</td><td>${record.bankBalance?.toLocaleString()}</td></tr>
+                <tr><td>Book Balance</td><td>${record.bookBalance?.toLocaleString()}</td></tr>
+                <tr><td>Reconciling Items</td><td>${record.reconcilingItems?.toLocaleString()}</td></tr>
+                <tr className="font-bold"><td>Reconciled Balance</td><td>${(record.bookBalance + record.reconcilingItems)?.toLocaleString()}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        );
+    };
+
+    const PaymentsInvoices = () => {
+        const { data, loading, error } = useFetch('/payments');
+        if (loading) return <p>Loading...</p>;
+        if (error) return <p className="text-red-500">Error: {error}</p>;
+
+        return (
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Payments History</h2>
+              <table>
+                <thead><tr><th>Payment ID</th><th>Date</th><th>Payee/Payer</th><th>Amount</th><th>Description</th></tr></thead>
+                <tbody>
+                  {(data || []).map(item => (
+                    <tr key={item.id}>
+                        <td>{item.paymentId}</td>
+                        <td>{item.date}</td>
+                        <td>{item.payee}</td>
+                        <td>${item.amount.toLocaleString()}</td>
+                        <td>{item.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+        );
+    };
+
+    // Finance Component
+const Finance = () => {
+  const [activeSubSection, setActiveSubSection] = useState('general-ledger');
+  
+  const subSections = [
+    { key: 'general-ledger', label: 'General Ledger', component: <GeneralLedger /> },
+    { key: 'accounts-payable', label: 'Accounts Payable', component: <AccountsPayable /> },
+    { key: 'accounts-receivable', label: 'Accounts Receivable', component: <AccountsReceivable /> },
+    { key: 'cost-centers', label: 'Cost Centers', component: <CostCenters /> },
+    { key: 'project-budgets', label: 'Project Budgets', component: <ProjectBudgets /> },
+    { key: 'profit-loss', label: 'P&L Statements', component: <ProfitLoss /> },
+    { key: 'balance-sheet', label: 'Balance Sheet', component: <BalanceSheet /> },
+    { key: 'cash-flow', label: 'Cash Flow', component: <CashFlow /> },
+    { key: 'bank-reconciliation', label: 'Bank Reconciliation', component: <BankReconciliation /> },
+  ];
+      return (
+        <div>
+          <h1 className="text-3xl font-bold mb-6">Finance</h1>
+          <div className="nav-tabs">
+            {subSections.map(section => (
+              <button
+                key={section.key}
+                onClick={() => setActiveSubSection(section.key)}
+                className={activeSubSection === section.key ? 'active' : ''}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
+          <div className="section active">
+            {subSections.find(section => section.key === activeSubSection)?.component}
+          </div>
+        </div>
+      );
+    };
+
+    // Placeholder Components for other modules
+    const HR = () => <div><h1 className="text-3xl font-bold">HR</h1><p>HR content here - Employee Count: 150 (+5%), New Hires: 10 (+2%)</p></div>;
+    const Projects = () => <div><h1 className="text-3xl font-bold">Projects</h1><p>Projects content here</p></div>;
+    const Warehouse = () => <div><h1 className="text-3xl font-bold">Warehouse</h1><p>Warehouse content here</p></div>;
+    const Purchases = () => <div><h1 className="text-3xl font-bold">Purchases</h1><p>Purchases content here</p></div>;
+    const TechnicalOffice = () => <div><h1 className="text-3xl font-bold">Technical Office</h1><p>Technical Office content here</p></div>;
+    const ShowroomSales = () => <div><h1 className="text-3xl font-bold">Showroom Sales</h1><p>Showroom Sales content here</p></div>;
+    const OfficeManagement = () => <div><h1 className="text-3xl font-bold">Office Management</h1><p>Office Management content here</p></div>;
+    const Reports = () => <div><h1 className="text-3xl font-bold">Reports</h1><p>Reports content here</p></div>;
+    const ChatBox = () => <div><h1 className="text-3xl font-bold">ChatBox</h1><p>ChatBox content here</p></div>;
+    const Settings = () => <div><h1 className="text-3xl font-bold">Settings</h1><p>Settings content here</p></div>;
+    const Contracts = () => <div><h1 className="text-3xl font-bold">Contracts</h1><p>Contracts content here</p></div>;
+
+    // Main App
+    const App = () => {
+      const [activeModule, setActiveModule] = useState('dashboard');
+      const [darkMode, setDarkMode] = useState(false);
+
+      const renderModule = () => {
+        switch (activeModule) {
+          case 'dashboard': return <Dashboard />;
+          case 'finance': return <Finance />;
+          case 'hr': return <HR />;
+          case 'projects': return <Projects />;
+          case 'warehouse': return <Warehouse />;
+          case 'purchases': return <Purchases />;
+          case 'technical-office': return <TechnicalOffice />;
+          case 'showroom-sales': return <ShowroomSales />;
+          case 'office-management': return <OfficeManagement />;
+          case 'reports': return <Reports />;
+          case 'chatbox': return <ChatBox />;
+          case 'settings': return <Settings />;
+          case 'contracts': return <Contracts />;
+          default: return <Dashboard />;
+        }
+      };
+
+      return (
+        <div className={darkMode ? 'dark' : ''}>
+          <div className="container">
+            <Sidebar activeModule={activeModule} setActiveModule={setActiveModule} darkMode={darkMode} setDarkMode={setDarkMode} />
+            <div className="content">
+              {renderModule()}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
+

@@ -10,14 +10,16 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Serve static React build
 const path = require("path");
-app.use(express.static(path.join(__dirname, "client/build")));
 
-// لو عايز أي route تروح للـ React app
+// يخدم أي static files من الرووت
+app.use(express.static(__dirname));
+
+// أي route تاني يرجّع index.html
 app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "client/build", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
 });
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {

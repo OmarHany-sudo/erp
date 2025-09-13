@@ -10,7 +10,6 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-const cors = require("cors");
 
 const app = express();
 

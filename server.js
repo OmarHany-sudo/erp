@@ -10,6 +10,14 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Serve static React build
+const path = require("path");
+app.use(express.static(path.join(__dirname, "client/build")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client/build", "index.html"));
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

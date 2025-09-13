@@ -10,15 +10,17 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-const path = require("path");
+const express = require("express");
+const cors = require("cors");
 
-// يخدم أي static files من الرووت
-app.use(express.static(__dirname));
+const app = express();
 
-// أي route تاني يرجّع index.html
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+// فعل CORS
+app.use(cors({
+  origin: "*", // ينفع تحدد لينك معين زي "http://localhost:3000"
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
 
 
 // Error handling middleware

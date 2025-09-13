@@ -387,11 +387,15 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+//بدأ
+const PORT = process.env.PORT || 5000;
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on port ${port} at ${new Date().toLocaleString('en-US', { timeZone: 'Europe/Helsinki' })}`);
+app.listen(PORT, () => {
+  console.log(
+    `Server running on port ${PORT} at ${new Date().toLocaleString('en-US', { timeZone: 'Europe/Helsinki' })}`
+  );
 });
 
 module.exports = app;
+
 

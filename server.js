@@ -14,8 +14,9 @@ app.use(bodyParser.json());
 const path = require("path");
 app.use(express.static(path.join(__dirname, "client/build")));
 
-app.get('/*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+// لو عايز أي route تروح للـ React app
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, "client/build", "index.html"));
 });
 
 // Error handling middleware
